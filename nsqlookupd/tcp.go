@@ -11,6 +11,7 @@ type tcpServer struct {
 	ctx *Context
 }
 
+// 当监听到一个tcp client到来的时候，调用handle函数
 func (p *tcpServer) Handle(clientConn net.Conn) {
 	p.ctx.nsqlookupd.logf(LOG_INFO, "TCP: new client(%s)", clientConn.RemoteAddr())
 

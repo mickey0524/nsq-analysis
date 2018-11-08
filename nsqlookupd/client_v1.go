@@ -4,6 +4,7 @@ import (
 	"net"
 )
 
+// tcp Client
 type ClientV1 struct {
 	net.Conn
 	peerInfo *PeerInfo

@@ -17,6 +17,7 @@ type httpServer struct {
 	router http.Handler
 }
 
+// http router
 func newHTTPServer(ctx *Context) *httpServer {
 	log := http_api.Log(ctx.nsqlookupd.logf)
 
