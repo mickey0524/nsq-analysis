@@ -17,7 +17,7 @@ type httpServer struct {
 	router http.Handler
 }
 
-// http router
+// http router，用于响应nsqadmin的请求，其实就是一个web server，用来显示nsqlookup.DB的状态
 func newHTTPServer(ctx *Context) *httpServer {
 	log := http_api.Log(ctx.nsqlookupd.logf)
 
@@ -66,10 +66,12 @@ func (s *httpServer) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	s.router.ServeHTTP(w, req)
 }
 
+// 响应 /ping 
 func (s *httpServer) pingHandler(w http.ResponseWriter, req *http.Request, ps httprouter.Params) (interface{}, error) {
 	return "OK", nil
 }
 
+// 响应 /info，返回当前nsq的版本
 func (s *httpServer) doInfo(w http.ResponseWriter, req *http.Request, ps httprouter.Params) (interface{}, error) {
 	return struct {
 		Version string `json:"version"`
@@ -78,6 +80,7 @@ func (s *httpServer) doInfo(w http.ResponseWriter, req *http.Request, ps httprou
 	}, nil
 }
 
+// 返回当前nsqlookup.DB中的全部topic值
 func (s *httpServer) doTopics(w http.ResponseWriter, req *http.Request, ps httprouter.Params) (interface{}, error) {
 	topics := s.ctx.nsqlookupd.DB.FindRegistrations("topic", "*", "").Keys()
 	return map[string]interface{}{
@@ -85,6 +88,7 @@ func (s *httpServer) doTopics(w http.ResponseWriter, req *http.Request, ps httpr
 	}, nil
 }
 
+// 返回指定topic在nsqlookup.DB中的全部channel值
 func (s *httpServer) doChannels(w http.ResponseWriter, req *http.Request, ps httprouter.Params) (interface{}, error) {
 	reqParams, err := http_api.NewReqParams(req)
 	if err != nil {
@@ -102,6 +106,7 @@ func (s *httpServer) doChannels(w http.ResponseWriter, req *http.Request, ps htt
 	}, nil
 }
 
+// 返回指定主题的一系列生产者 
 func (s *httpServer) doLookup(w http.ResponseWriter, req *http.Request, ps httprouter.Params) (interface{}, error) {
 	reqParams, err := http_api.NewReqParams(req)
 	if err != nil {
@@ -128,6 +133,7 @@ func (s *httpServer) doLookup(w http.ResponseWriter, req *http.Request, ps httpr
 	}, nil
 }
 
+// 创建topic
 func (s *httpServer) doCreateTopic(w http.ResponseWriter, req *http.Request, ps httprouter.Params) (interface{}, error) {
 	reqParams, err := http_api.NewReqParams(req)
 	if err != nil {
@@ -150,6 +156,8 @@ func (s *httpServer) doCreateTopic(w http.ResponseWriter, req *http.Request, ps 
 	return nil, nil
 }
 
+
+// 删除topic
 func (s *httpServer) doDeleteTopic(w http.ResponseWriter, req *http.Request, ps httprouter.Params) (interface{}, error) {
 	reqParams, err := http_api.NewReqParams(req)
 	if err != nil {
@@ -176,6 +184,7 @@ func (s *httpServer) doDeleteTopic(w http.ResponseWriter, req *http.Request, ps 
 	return nil, nil
 }
 
+// 屏蔽指定node的一个topic
 func (s *httpServer) doTombstoneTopicProducer(w http.ResponseWriter, req *http.Request, ps httprouter.Params) (interface{}, error) {
 	reqParams, err := http_api.NewReqParams(req)
 	if err != nil {
@@ -204,6 +213,7 @@ func (s *httpServer) doTombstoneTopicProducer(w http.ResponseWriter, req *http.R
 	return nil, nil
 }
 
+// 创建 channel
 func (s *httpServer) doCreateChannel(w http.ResponseWriter, req *http.Request, ps httprouter.Params) (interface{}, error) {
 	reqParams, err := http_api.NewReqParams(req)
 	if err != nil {
@@ -226,6 +236,7 @@ func (s *httpServer) doCreateChannel(w http.ResponseWriter, req *http.Request, p
 	return nil, nil
 }
 
+// 删除 channel
 func (s *httpServer) doDeleteChannel(w http.ResponseWriter, req *http.Request, ps httprouter.Params) (interface{}, error) {
 	reqParams, err := http_api.NewReqParams(req)
 	if err != nil {
@@ -261,6 +272,7 @@ type node struct {
 	Topics           []string `json:"topics"`
 }
 
+// 返回一系列的nsqd节点
 func (s *httpServer) doNodes(w http.ResponseWriter, req *http.Request, ps httprouter.Params) (interface{}, error) {
 	// dont filter out tombstoned nodes
 	producers := s.ctx.nsqlookupd.DB.FindProducers("client", "", "").FilterByActive(
@@ -298,6 +310,7 @@ func (s *httpServer) doNodes(w http.ResponseWriter, req *http.Request, ps httpro
 	}, nil
 }
 
+// 返回当前nsqlookup.DB中的全部nsqd节点
 func (s *httpServer) doDebug(w http.ResponseWriter, req *http.Request, ps httprouter.Params) (interface{}, error) {
 	s.ctx.nsqlookupd.DB.RLock()
 	defer s.ctx.nsqlookupd.DB.RUnlock()
