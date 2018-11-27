@@ -15,6 +15,7 @@ const (
 
 type MessageID [MsgIDLength]byte
 
+// 定义的消息结构体
 type Message struct {
 	ID        MessageID
 	Body      []byte
@@ -29,6 +30,7 @@ type Message struct {
 	deferred   time.Duration
 }
 
+// 新建一个消息
 func NewMessage(id MessageID, body []byte) *Message {
 	return &Message{
 		ID:        id,
@@ -37,10 +39,12 @@ func NewMessage(id MessageID, body []byte) *Message {
 	}
 }
 
+// 将一条消息写入 bytes.buffer，进而进行磁盘存储
 func (m *Message) WriteTo(w io.Writer) (int64, error) {
 	var buf [10]byte
 	var total int64
 
+	// 大字节序存储消息时间戳和消息尝试次数
 	binary.BigEndian.PutUint64(buf[:8], uint64(m.Timestamp))
 	binary.BigEndian.PutUint16(buf[8:10], uint16(m.Attempts))
 
@@ -50,12 +54,14 @@ func (m *Message) WriteTo(w io.Writer) (int64, error) {
 		return total, err
 	}
 
+	// 写入消息id
 	n, err = w.Write(m.ID[:])
 	total += int64(n)
 	if err != nil {
 		return total, err
 	}
 
+	// 写入消息body
 	n, err = w.Write(m.Body)
 	total += int64(n)
 	if err != nil {
@@ -75,6 +81,7 @@ func (m *Message) WriteTo(w io.Writer) (int64, error) {
 //                        (uint16)
 //                         2-byte
 //                        attempts
+// 消息解码
 func decodeMessage(b []byte) (*Message, error) {
 	var msg Message
 
@@ -90,6 +97,7 @@ func decodeMessage(b []byte) (*Message, error) {
 	return &msg, nil
 }
 
+// 将一条消息转为byte数组存入磁盘
 func writeMessageToBackend(buf *bytes.Buffer, msg *Message, bq BackendQueue) error {
 	buf.Reset()
 	_, err := msg.WriteTo(buf)

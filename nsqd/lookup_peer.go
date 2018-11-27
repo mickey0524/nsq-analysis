@@ -7,7 +7,6 @@ import (
 	"net"
 	"time"
 
-	"github.com/nsqio/go-nsq"
 	"github.com/nsqio/nsq/internal/lg"
 )
 
@@ -17,16 +16,17 @@ import (
 // gracefully (i.e. it is all handled by the library).  Clients can simply use the
 // Command interface to perform a round-trip.
 type lookupPeer struct {
-	logf            lg.AppLogFunc
-	addr            string
-	conn            net.Conn
-	state           int32
-	connectCallback func(*lookupPeer)
-	maxBodySize     int64
+	logf            lg.AppLogFunc     // 日志函数
+	addr            string            // nsqlookupd 的地址
+	conn            net.Conn          // nsqd 和 nsqlookupd 之间的连接
+	state           int32             // 当前 nsqd 对 nsqlookupd 的连接状态
+	connectCallback func(*lookupPeer) // nsqd 连接上 nsqlookupd 之后执行的回调函数
+	maxBodySize     int64             // nsqd 发送给 nsqlookupd 的包的最大长度
 	Info            peerInfo
 }
 
 // peerInfo contains metadata for a lookupPeer instance (and is JSON marshalable)
+// peerInfo 结构体存储了 nsqlookupd 的元数据
 type peerInfo struct {
 	TCPPort          int    `json:"tcp_port"`
 	HTTPPort         int    `json:"http_port"`
@@ -48,6 +48,7 @@ func newLookupPeer(addr string, maxBodySize int64, l lg.AppLogFunc, connectCallb
 }
 
 // Connect will Dial the specified address, with timeouts
+// nsqd 连接对应的 nsqlookupd
 func (lp *lookupPeer) Connect() error {
 	lp.logf(lg.INFO, "LOOKUP connecting to %s", lp.addr)
 	conn, err := net.DialTimeout("tcp", lp.addr, time.Second)
@@ -76,6 +77,7 @@ func (lp *lookupPeer) Write(data []byte) (int, error) {
 }
 
 // Close implements the io.Closer interface
+// 断开 nsqd 和 nsqlookupd 的连接
 func (lp *lookupPeer) Close() error {
 	lp.state = stateDisconnected
 	if lp.conn != nil {
@@ -90,20 +92,22 @@ func (lp *lookupPeer) Close() error {
 // reconnecting in the event of a failure.
 //
 // It returns the response from nsqlookupd as []byte
+// nsqd 引入 go-nsq 包，与 nsqdlookup 进行 TCP 通信，例如 PING, REGISTER, UNREGISTER, IDENTITY
 func (lp *lookupPeer) Command(cmd *nsq.Command) ([]byte, error) {
 	initialState := lp.state
+	// 如果当前状态部位连接状态，尝试重新连接
 	if lp.state != stateConnected {
 		err := lp.Connect()
 		if err != nil {
 			return nil, err
 		}
 		lp.state = stateConnected
-		_, err = lp.Write(nsq.MagicV1)
+		_, err = lp.Write(nsq.MagicV1) // nsqlookupd 响应 tcp 连接的时候，会先读取 4 个 byte，如果为 "  V1" 才接收连接
 		if err != nil {
 			lp.Close()
 			return nil, err
 		}
-		if initialState == stateDisconnected {
+		if initialState == stateDisconnected { // 重连完毕，执行回调函数
 			lp.connectCallback(lp)
 		}
 		if lp.state != stateConnected {
@@ -118,7 +122,7 @@ func (lp *lookupPeer) Command(cmd *nsq.Command) ([]byte, error) {
 		lp.Close()
 		return nil, err
 	}
-	resp, err := readResponseBounded(lp, lp.maxBodySize)
+	resp, err := readResponseBounded(lp, lp.maxBodySize) // 包大小控制在maxBodySize内
 	if err != nil {
 		lp.Close()
 		return nil, err
@@ -126,6 +130,7 @@ func (lp *lookupPeer) Command(cmd *nsq.Command) ([]byte, error) {
 	return resp, nil
 }
 
+// 比较 TCP 包的大小和 maxBodySize 的大小
 func readResponseBounded(r io.Reader, limit int64) ([]byte, error) {
 	var msgSize int32
 
