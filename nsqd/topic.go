@@ -8,37 +8,37 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/nsqio/go-diskqueue"
 	"github.com/nsqio/nsq/internal/lg"
 	"github.com/nsqio/nsq/internal/quantile"
 	"github.com/nsqio/nsq/internal/util"
 )
 
+// Topic 结构体
 type Topic struct {
 	// 64bit atomic vars need to be first for proper alignment on 32bit platforms
-	messageCount uint64
+	messageCount uint64 // topic 中的消息数目
 
 	sync.RWMutex
 
-	name              string
-	channelMap        map[string]*Channel
-	backend           BackendQueue
-	memoryMsgChan     chan *Message
-	startChan         chan int
-	exitChan          chan int
-	channelUpdateChan chan int
-	waitGroup         util.WaitGroupWrapper
-	exitFlag          int32
+	name              string                // topic 的名字
+	channelMap        map[string]*Channel   // topic 中的 channel map
+	backend           BackendQueue          // 二级磁盘存储队列
+	memoryMsgChan     chan *Message         // 消息 chan，当 nsqd 接收到一条消息，写入该 channel
+	startChan         chan int              // 启动 chan
+	exitChan          chan int              // 终止 chan
+	channelUpdateChan chan int              // topic 内的 channel map 增加/删除
+	waitGroup         util.WaitGroupWrapper // 包裹一层 waitGroup，当执行 Exit 的时候，需要等待部分函数执行完毕
+	exitFlag          int32                 // topic 是否处于退出状态
 	idFactory         *guidFactory
 
-	ephemeral      bool
-	deleteCallback func(*Topic)
+	ephemeral      bool         // topic 是否为临时的，临时的 topic 不会存入磁盘
+	deleteCallback func(*Topic) // 删除的回调函数
 	deleter        sync.Once
 
-	paused    int32
+	paused    int32 // topic 是否处于暂停状态
 	pauseChan chan int
 
-	ctx *context
+	ctx *context // nsqd 上下文
 }
 
 // Topic constructor
@@ -57,7 +57,7 @@ func NewTopic(topicName string, ctx *context, deleteCallback func(*Topic)) *Topi
 		idFactory:         NewGUIDFactory(ctx.nsqd.getOpts().ID),
 	}
 
-	if strings.HasSuffix(topicName, "#ephemeral") {
+	if strings.HasSuffix(topicName, "#ephemeral") { // 临时 topic，消息超出内存限制不落磁盘
 		t.ephemeral = true
 		t.backend = newDummyBackendQueue()
 	} else {
@@ -79,7 +79,7 @@ func NewTopic(topicName string, ctx *context, deleteCallback func(*Topic)) *Topi
 
 	t.waitGroup.Wrap(t.messagePump)
 
-	t.ctx.nsqd.Notify(t)
+	t.ctx.nsqd.Notify(t) // 通知 lookupLoop，新增了一个 Topic，进行 Register 操作
 
 	return t
 }
@@ -99,6 +99,8 @@ func (t *Topic) Exiting() bool {
 // GetChannel performs a thread safe operation
 // to return a pointer to a Channel object (potentially new)
 // for the given Topic
+// 获取 topic 中 name 为 channelName 的 GetChannel
+// 如果不存在，新建一个 channel
 func (t *Topic) GetChannel(channelName string) *Channel {
 	t.Lock()
 	channel, isNew := t.getOrCreateChannel(channelName)
@@ -130,6 +132,7 @@ func (t *Topic) getOrCreateChannel(channelName string) (*Channel, bool) {
 	return channel, false
 }
 
+// 获取 topic 中 name 为 channelName 的 channel，如果不存在，返回 nil
 func (t *Topic) GetExistingChannel(channelName string) (*Channel, error) {
 	t.RLock()
 	defer t.RUnlock()
@@ -140,7 +143,7 @@ func (t *Topic) GetExistingChannel(channelName string) (*Channel, error) {
 	return channel, nil
 }
 
-// DeleteExistingChannel removes a channel from the topic only if it exists
+// 当 topic 中包括 name 为 channelName 的 channel，将其删除
 func (t *Topic) DeleteExistingChannel(channelName string) error {
 	t.Lock()
 	channel, ok := t.channelMap[channelName]
@@ -204,10 +207,11 @@ func (t *Topic) PutMessages(msgs []*Message) error {
 	return nil
 }
 
+// 收到一条 message，将其写入 memoryMsgChan 或者 BackendQueue
 func (t *Topic) put(m *Message) error {
 	select {
-	case t.memoryMsgChan <- m:
-	default:
+	case t.memoryMsgChan <- m: // 当 chan 中还能写入时，写入 memoryMsgChan
+	default: // 否则，写入 BackendQueue，落入磁盘
 		b := bufferPoolGet()
 		err := writeMessageToBackend(b, m, t.backend)
 		bufferPoolPut(b)
@@ -226,8 +230,9 @@ func (t *Topic) Depth() int64 {
 	return int64(len(t.memoryMsgChan)) + t.backend.Depth()
 }
 
-// messagePump selects over the in-memory and backend queue and
-// writes messages to every channel for this topic
+// topic 启动后，执行 messagePump
+// messagePump 从内存中的 memoryMsgChan 以及 BackendQueue 中获取message
+// 并将 message 放入全部的 channel
 func (t *Topic) messagePump() {
 	var msg *Message
 	var buf []byte
@@ -262,6 +267,7 @@ func (t *Topic) messagePump() {
 	// main message loop
 	for {
 		select {
+		// 从这里可以看到，如果消息已经被写入磁盘的话，nsq 消费消息就是无序的
 		case msg = <-memoryMsgChan:
 		case buf = <-backendChan:
 			msg, err = decodeMessage(buf)
@@ -303,6 +309,8 @@ func (t *Topic) messagePump() {
 			// needs a unique instance but...
 			// fastpath to avoid copy if its the first channel
 			// (the topic already created the first copy)
+			// 这里 msg 实例要进行深拷贝，因为每个 channel 需要自己的实例
+			// 为了重发/延迟发送等
 			if i > 0 {
 				chanMsg = NewMessage(msg.ID, msg.Body)
 				chanMsg.Timestamp = msg.Timestamp
@@ -326,11 +334,13 @@ exit:
 }
 
 // Delete empties the topic and all its channels and closes
+// 删除 topic
 func (t *Topic) Delete() error {
 	return t.exit(true)
 }
 
 // Close persists all outstanding topic data and closes all its channels
+// 关闭 topic
 func (t *Topic) Close() error {
 	return t.exit(false)
 }
@@ -345,7 +355,7 @@ func (t *Topic) exit(deleted bool) error {
 
 		// since we are explicitly deleting a topic (not just at system exit time)
 		// de-register this from the lookupd
-		t.ctx.nsqd.Notify(t)
+		t.ctx.nsqd.Notify(t) // 告知 lookupLoop，topic 被删除了，执行 UNREGISTER 告知 nsqlookupd
 	} else {
 		t.ctx.nsqd.logf(LOG_INFO, "TOPIC(%s): closing", t.name)
 	}
@@ -356,6 +366,7 @@ func (t *Topic) exit(deleted bool) error {
 	t.waitGroup.Wait()
 
 	if deleted {
+		// topic 删除，topic 下的 channel 同样执行 Delete 操作
 		t.Lock()
 		for _, channel := range t.channelMap {
 			delete(t.channelMap, channel.name)
@@ -363,7 +374,7 @@ func (t *Topic) exit(deleted bool) error {
 		}
 		t.Unlock()
 
-		// empty the queue (deletes the backend files, too)
+		// 清空 topic 的消息 chan，删除落在磁盘上的消息
 		t.Empty()
 		return t.backend.Delete()
 	}
@@ -377,7 +388,7 @@ func (t *Topic) exit(deleted bool) error {
 		}
 	}
 
-	// write anything leftover to disk
+	// 将当前内存消息 chan 中的 msg 写入磁盘
 	t.flush()
 	return t.backend.Close()
 }
