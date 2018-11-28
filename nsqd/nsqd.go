@@ -42,41 +42,43 @@ type Client interface {
 	IsProducer() bool
 }
 
+// NSQD 结构体
 type NSQD struct {
 	// 64bit atomic vars need to be first for proper alignment on 32bit platforms
 	clientIDSequence int64
 
 	sync.RWMutex
 
-	opts atomic.Value
+	opts atomic.Value // nsqd 的配置文件
 
-	dl        *dirlock.DirLock
-	isLoading int32
-	errValue  atomic.Value
-	startTime time.Time
+	dl        *dirlock.DirLock // 文件锁
+	isLoading int32            // nsqd 是否在读取存储在 datapath 中的 metadata 文件
+	errValue  atomic.Value     // 错误信息
+	startTime time.Time        // nsqd 开始运行的时间
 
-	topicMap map[string]*Topic
+	topicMap map[string]*Topic // nsqd 中的 topic map
 
 	clientLock sync.RWMutex
 	clients    map[int64]Client
 
 	lookupPeers atomic.Value
 
-	tcpListener   net.Listener
-	httpListener  net.Listener
-	httpsListener net.Listener
-	tlsConfig     *tls.Config
+	tcpListener   net.Listener // tcp 监听器
+	httpListener  net.Listener // http 监听器
+	httpsListener net.Listener // https 监听器
+	tlsConfig     *tls.Config  // tls 的配置文件
 
-	poolSize int
+	poolSize int // nsqd 执行 queueScan 的 worker 数目
 
-	notifyChan           chan interface{}
-	optsNotificationChan chan struct{}
-	exitChan             chan int
-	waitGroup            util.WaitGroupWrapper
+	notifyChan           chan interface{}      // 通知 chan，当 增加/删除 topic/channel 的时候，通知 lookupLoop 进行 Register/Unregister
+	optsNotificationChan chan struct{}         // 配置文件 chan
+	exitChan             chan int              // 退出 chan
+	waitGroup            util.WaitGroupWrapper // 包裹一层 waitGroup，当执行 Exit 的时候，需要等待部分函数执行完毕
 
 	ci *clusterinfo.ClusterInfo
 }
 
+// New 新建一个 nsqd 实例
 func New(opts *Options) *NSQD {
 	dataPath := opts.DataPath
 	if opts.DataPath == "" {
@@ -111,7 +113,7 @@ func New(opts *Options) *NSQD {
 		os.Exit(1)
 	}
 
-	err = n.dl.Lock()
+	err = n.dl.Lock() // 给 datapath 上文件锁，为了必要时候存储 metadata
 	if err != nil {
 		n.logf(LOG_FATAL, "--data-path=%s in use (possibly by another instance of nsqd)", dataPath)
 		os.Exit(1)
@@ -170,10 +172,12 @@ func New(opts *Options) *NSQD {
 	return n
 }
 
+// 获取 nsqd 当前的 options
 func (n *NSQD) getOpts() *Options {
 	return n.opts.Load().(*Options)
 }
 
+// 更新 nsqd 的 options
 func (n *NSQD) swapOpts(opts *Options) {
 	n.opts.Store(opts)
 }
@@ -185,31 +189,38 @@ func (n *NSQD) triggerOptsNotification() {
 	}
 }
 
+// RealTCPAddr 返回 tcp 监听器的地址
 func (n *NSQD) RealTCPAddr() *net.TCPAddr {
 	return n.tcpListener.Addr().(*net.TCPAddr)
 }
 
+// RealHTTPAddr 返回 http 监听器的地址
 func (n *NSQD) RealHTTPAddr() *net.TCPAddr {
 	return n.httpListener.Addr().(*net.TCPAddr)
 }
 
+// RealHTTPSAddr 返回 https 监听器的地址
 func (n *NSQD) RealHTTPSAddr() *net.TCPAddr {
 	return n.httpsListener.Addr().(*net.TCPAddr)
 }
 
+// SetHealth 存储错误状态
 func (n *NSQD) SetHealth(err error) {
 	n.errValue.Store(errStore{err: err})
 }
 
+// IsHealthy 判断当前 nsqd 是否健康
 func (n *NSQD) IsHealthy() bool {
 	return n.GetError() == nil
 }
 
+// GetError 获取错误信息
 func (n *NSQD) GetError() error {
 	errValue := n.errValue.Load()
 	return errValue.(errStore).err
 }
 
+// GetHealth 得到当前 nsqd 的健康状态
 func (n *NSQD) GetHealth() string {
 	err := n.GetError()
 	if err != nil {
@@ -218,16 +229,19 @@ func (n *NSQD) GetHealth() string {
 	return "OK"
 }
 
+// GetStartTime 获取 nsqd 的启动时间
 func (n *NSQD) GetStartTime() time.Time {
 	return n.startTime
 }
 
+// AddClient 新增消费者
 func (n *NSQD) AddClient(clientID int64, client Client) {
 	n.clientLock.Lock()
 	n.clients[clientID] = client
 	n.clientLock.Unlock()
 }
 
+// RemoveClient 删除消费者
 func (n *NSQD) RemoveClient(clientID int64) {
 	n.clientLock.Lock()
 	_, ok := n.clients[clientID]
@@ -239,21 +253,22 @@ func (n *NSQD) RemoveClient(clientID int64) {
 	n.clientLock.Unlock()
 }
 
+// Main 函数启动 nsqd
 func (n *NSQD) Main() {
 	var err error
-	ctx := &context{n}
+	ctx := &context{n} // 创建 context 实例，存储 nsqd 上下文
 
-	n.tcpListener, err = net.Listen("tcp", n.getOpts().TCPAddress)
+	n.tcpListener, err = net.Listen("tcp", n.getOpts().TCPAddress) // 创建 nsqd 的 tcp 监听器
 	if err != nil {
 		n.logf(LOG_FATAL, "listen (%s) failed - %s", n.getOpts().TCPAddress, err)
 		os.Exit(1)
 	}
-	n.httpListener, err = net.Listen("tcp", n.getOpts().HTTPAddress)
+	n.httpListener, err = net.Listen("tcp", n.getOpts().HTTPAddress) // 创建 nsqd 的 http 监听器
 	if err != nil {
 		n.logf(LOG_FATAL, "listen (%s) failed - %s", n.getOpts().HTTPAddress, err)
 		os.Exit(1)
 	}
-	if n.tlsConfig != nil && n.getOpts().HTTPSAddress != "" {
+	if n.tlsConfig != nil && n.getOpts().HTTPSAddress != "" { // 如果有需要，创建 nsqd 的 https 监听器
 		n.httpsListener, err = tls.Listen("tcp", n.getOpts().HTTPSAddress, n.tlsConfig)
 		if err != nil {
 			n.logf(LOG_FATAL, "listen (%s) failed - %s", n.getOpts().HTTPSAddress, err)
@@ -261,15 +276,15 @@ func (n *NSQD) Main() {
 		}
 	}
 
-	tcpServer := &tcpServer{ctx: ctx}
+	tcpServer := &tcpServer{ctx: ctx} // 创建 tcp Server
 	n.waitGroup.Wrap(func() {
 		protocol.TCPServer(n.tcpListener, tcpServer, n.logf)
 	})
-	httpServer := newHTTPServer(ctx, false, n.getOpts().TLSRequired == TLSRequired)
+	httpServer := newHTTPServer(ctx, false, n.getOpts().TLSRequired == TLSRequired) // 创建 http Server
 	n.waitGroup.Wrap(func() {
 		http_api.Serve(n.httpListener, httpServer, "HTTP", n.logf)
 	})
-	if n.tlsConfig != nil && n.getOpts().HTTPSAddress != "" {
+	if n.tlsConfig != nil && n.getOpts().HTTPSAddress != "" { // 如果有必要的话，创建 https Server
 		httpsServer := newHTTPServer(ctx, true, true)
 		n.waitGroup.Wrap(func() {
 			http_api.Serve(n.httpsListener, httpsServer, "HTTPS", n.logf)
@@ -283,6 +298,7 @@ func (n *NSQD) Main() {
 	}
 }
 
+// metadata(元数据)结构体，用于存储 nsqd 中的 topic 和 channel
 type meta struct {
 	Topics []struct {
 		Name     string `json:"name"`
@@ -294,10 +310,12 @@ type meta struct {
 	} `json:"topics"`
 }
 
+// 获取存储元数据的路径
 func newMetadataFile(opts *Options) string {
 	return path.Join(opts.DataPath, "nsqd.dat")
 }
 
+// 读取指定路径的文件
 func readOrEmpty(fn string) ([]byte, error) {
 	data, err := ioutil.ReadFile(fn)
 	if err != nil {
@@ -308,6 +326,7 @@ func readOrEmpty(fn string) ([]byte, error) {
 	return data, nil
 }
 
+// 同步写入，确保写入元数据后，close nsqd
 func writeSyncFile(fn string, data []byte) error {
 	f, err := os.OpenFile(fn, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
@@ -322,8 +341,9 @@ func writeSyncFile(fn string, data []byte) error {
 	return err
 }
 
+// LoadMetadata 读取存储的 nsqd 元数据，恢复意外断开时候的状态
 func (n *NSQD) LoadMetadata() error {
-	atomic.StoreInt32(&n.isLoading, 1)
+	atomic.StoreInt32(&n.isLoading, 1) // 将正在 loading 的标识符设置为1
 	defer atomic.StoreInt32(&n.isLoading, 0)
 
 	fn := newMetadataFile(n.getOpts())
@@ -337,11 +357,12 @@ func (n *NSQD) LoadMetadata() error {
 	}
 
 	var m meta
-	err = json.Unmarshal(data, &m)
+	err = json.Unmarshal(data, &m) // 将元数据解析到 meta 实例中
 	if err != nil {
 		return fmt.Errorf("failed to parse metadata in %s - %s", fn, err)
 	}
 
+	// 根据解析所得的元数据，恢复 nsqd 的 topics 和各 topic 的 channels
 	for _, t := range m.Topics {
 		if !protocol.IsValidTopicName(t.Name) {
 			n.logf(LOG_WARN, "skipping creation of invalid topic %s", t.Name)
@@ -366,6 +387,7 @@ func (n *NSQD) LoadMetadata() error {
 	return nil
 }
 
+// PersistMetadata 存储的 nsqd 元数据
 func (n *NSQD) PersistMetadata() error {
 	// persist metadata about what topics/channels we have, across restarts
 	fileName := newMetadataFile(n.getOpts())
@@ -422,17 +444,18 @@ func (n *NSQD) PersistMetadata() error {
 	return nil
 }
 
+// Exit 执行 nsqd 关闭时的操作
 func (n *NSQD) Exit() {
 	if n.tcpListener != nil {
-		n.tcpListener.Close()
+		n.tcpListener.Close() // 关闭 tcp 监听器
 	}
 
 	if n.httpListener != nil {
-		n.httpListener.Close()
+		n.httpListener.Close() // 关闭 http 监听器
 	}
 
 	if n.httpsListener != nil {
-		n.httpsListener.Close()
+		n.httpsListener.Close() // 关闭 https 监听器
 	}
 
 	n.Lock()
@@ -482,13 +505,15 @@ func (n *NSQD) GetTopic(topicName string) *Topic {
 	n.logf(LOG_INFO, "TOPIC(%s): created", t.name)
 	// topic is created but messagePump not yet started
 
-	// if loading metadata at startup, no lookupd connections yet, topic started after load
+	// if loading metadata at startup, no lookupd connections yet, topic started after
+	// 如果当前 nsqd 处于 loading metadata 的状态，在 load 完毕，会进行 topic.Start
 	if atomic.LoadInt32(&n.isLoading) == 1 {
 		return t
 	}
 
 	// if using lookupd, make a blocking call to get the topics, and immediately create them.
 	// this makes sure that any message received is buffered to the right channels
+	// 如果不处于 loading metadata 的状态，同时使用 nsqlookupd，那么请求 nsqlookupd，获取 topic 对应的全部 channel
 	lookupdHTTPAddrs := n.lookupdHTTPAddrs()
 	if len(lookupdHTTPAddrs) > 0 {
 		channelNames, err := n.ci.GetLookupdTopicChannels(t.name, lookupdHTTPAddrs)
@@ -510,7 +535,7 @@ func (n *NSQD) GetTopic(topicName string) *Topic {
 	return t
 }
 
-// GetExistingTopic gets a topic only if it exists
+// GetExistingTopic 获取一个存在的 topic
 func (n *NSQD) GetExistingTopic(topicName string) (*Topic, error) {
 	n.RLock()
 	defer n.RUnlock()
@@ -521,7 +546,7 @@ func (n *NSQD) GetExistingTopic(topicName string) (*Topic, error) {
 	return topic, nil
 }
 
-// DeleteExistingTopic removes a topic only if it exists
+// DeleteExistingTopic 删除一个存在的 topic
 func (n *NSQD) DeleteExistingTopic(topicName string) error {
 	n.RLock()
 	topic, ok := n.topicMap[topicName]
@@ -546,6 +571,7 @@ func (n *NSQD) DeleteExistingTopic(topicName string) error {
 	return nil
 }
 
+// Notify 通知 lookupLoop topic 和 channel 的更改
 func (n *NSQD) Notify(v interface{}) {
 	// since the in-memory metadata is incomplete,
 	// should not persist metadata while loading it.
@@ -570,7 +596,7 @@ func (n *NSQD) Notify(v interface{}) {
 	})
 }
 
-// channels returns a flat slice of all channels in all topics
+// 获取全部 topic 的 channels
 func (n *NSQD) channels() []*Channel {
 	var channels []*Channel
 	n.RLock()
@@ -586,7 +612,7 @@ func (n *NSQD) channels() []*Channel {
 }
 
 // resizePool adjusts the size of the pool of queueScanWorker goroutines
-//
+// resizePool 调整 queueScanWorker goroutine 的数目
 // 	1 <= pool <= min(num * 0.25, QueueScanWorkerPoolMax)
 //
 func (n *NSQD) resizePool(num int, workCh chan *Channel, responseCh chan bool, closeCh chan int) {
