@@ -611,9 +611,8 @@ func (n *NSQD) channels() []*Channel {
 	return channels
 }
 
-// resizePool adjusts the size of the pool of queueScanWorker goroutines
 // resizePool 调整 queueScanWorker goroutine 的数目
-// 	1 <= pool <= min(num * 0.25, QueueScanWorkerPoolMax)
+// 1 <= pool <= min(channel 数目 * 0.25, nsqd 配置文件中设置允许的最大 worker 数目)
 //
 func (n *NSQD) resizePool(num int, workCh chan *Channel, responseCh chan bool, closeCh chan int) {
 	idealPoolSize := int(float64(num) * 0.25)
@@ -673,13 +672,15 @@ func (n *NSQD) queueScanWorker(workCh chan *Channel, responseCh chan bool, close
 //
 // If QueueScanDirtyPercent (default: 25%) of the selected channels were dirty,
 // the loop continues without sleep.
+// nsqd 启动之后，执行 queueScanLoop 函数，queueScanLoop 执行在一个 goroutine 之上
+// 用于处理飞行队列和延迟队列，它管理一个 queueScanWorker 池并行进行处理
 func (n *NSQD) queueScanLoop() {
-	workCh := make(chan *Channel, n.getOpts().QueueScanSelectionCount)
-	responseCh := make(chan bool, n.getOpts().QueueScanSelectionCount)
+	workCh := make(chan *Channel, n.getOpts().QueueScanSelectionCount) // worker chan
+	responseCh := make(chan bool, n.getOpts().QueueScanSelectionCount) // worker chan
 	closeCh := make(chan int)
 
-	workTicker := time.NewTicker(n.getOpts().QueueScanInterval)
-	refreshTicker := time.NewTicker(n.getOpts().QueueScanRefreshInterval)
+	workTicker := time.NewTicker(n.getOpts().QueueScanInterval)           // worker 定时器，用于定时选取一定数量的 channel
+	refreshTicker := time.NewTicker(n.getOpts().QueueScanRefreshInterval) // refersh 定时器，用于定时更新 pool 数量
 
 	channels := n.channels()
 	n.resizePool(len(channels), workCh, responseCh, closeCh)

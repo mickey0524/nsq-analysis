@@ -4,20 +4,22 @@ import (
 	"container/heap"
 )
 
+// Item 最小堆元素
 type Item struct {
 	Value    interface{}
 	Priority int64
 	Index    int
 }
 
-// this is a priority queue as implemented by a min heap
-// ie. the 0th element is the *lowest* value
+// PriorityQueue 是使用最小堆实现的优先级队列，index 为0的 item 是 value 最小的
 type PriorityQueue []*Item
 
+// New 方法新建一个优先级队列
 func New(capacity int) PriorityQueue {
 	return make(PriorityQueue, 0, capacity)
 }
 
+// Sort 接口的三个方法 Len, Less, Swap
 func (pq PriorityQueue) Len() int {
 	return len(pq)
 }
@@ -32,6 +34,7 @@ func (pq PriorityQueue) Swap(i, j int) {
 	pq[j].Index = j
 }
 
+// Push 实现插入堆
 func (pq *PriorityQueue) Push(x interface{}) {
 	n := len(*pq)
 	c := cap(*pq)
@@ -46,6 +49,7 @@ func (pq *PriorityQueue) Push(x interface{}) {
 	(*pq)[n] = item
 }
 
+// Pop 实现弹出堆
 func (pq *PriorityQueue) Pop() interface{} {
 	n := len(*pq)
 	c := cap(*pq)
