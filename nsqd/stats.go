@@ -8,17 +8,19 @@ import (
 	"github.com/nsqio/nsq/internal/quantile"
 )
 
+// TopicStats 代表 topic 的当前状态
 type TopicStats struct {
-	TopicName    string         `json:"topic_name"`
-	Channels     []ChannelStats `json:"channels"`
-	Depth        int64          `json:"depth"`
-	BackendDepth int64          `json:"backend_depth"`
-	MessageCount uint64         `json:"message_count"`
-	Paused       bool           `json:"paused"`
+	TopicName    string         `json:"topic_name"`    // topic 的名字
+	Channels     []ChannelStats `json:"channels"`      // 属于本 topic 的全部 channel 的当前状态
+	Depth        int64          `json:"depth"`         // topic 的 depth（等于内存中消息通道的消息数目 + backendQueue 的 depth）
+	BackendDepth int64          `json:"backend_depth"` // backendQueue 的 depth
+	MessageCount uint64         `json:"message_count"` // topic 当前的消息数目
+	Paused       bool           `json:"paused"`        // topic 是否处于暂停状态
 
 	E2eProcessingLatency *quantile.Result `json:"e2e_processing_latency"`
 }
 
+// NewTopicStats 新建一个 TopicStats 实例
 func NewTopicStats(t *Topic, channels []ChannelStats) TopicStats {
 	return TopicStats{
 		TopicName:    t.name,
@@ -32,21 +34,23 @@ func NewTopicStats(t *Topic, channels []ChannelStats) TopicStats {
 	}
 }
 
+// ChannelStats 代表 channel 的当前状态
 type ChannelStats struct {
-	ChannelName   string        `json:"channel_name"`
-	Depth         int64         `json:"depth"`
-	BackendDepth  int64         `json:"backend_depth"`
-	InFlightCount int           `json:"in_flight_count"`
-	DeferredCount int           `json:"deferred_count"`
-	MessageCount  uint64        `json:"message_count"`
-	RequeueCount  uint64        `json:"requeue_count"`
-	TimeoutCount  uint64        `json:"timeout_count"`
-	Clients       []ClientStats `json:"clients"`
-	Paused        bool          `json:"paused"`
+	ChannelName   string        `json:"channel_name"`    // channel 的名字
+	Depth         int64         `json:"depth"`           // topic 的 depth（等于内存中消息通道的消息数目 + backendQueue 的 depth）
+	BackendDepth  int64         `json:"backend_depth"`   // backendQueue 的 depth
+	InFlightCount int           `json:"in_flight_count"` // 处于发送状态的消息总数
+	DeferredCount int           `json:"deferred_count"`  // 延迟发送的消息总数
+	MessageCount  uint64        `json:"message_count"`   // channel 当前的消息总数
+	RequeueCount  uint64        `json:"requeue_count"`   // channel 当前重新安排的消息总数
+	TimeoutCount  uint64        `json:"timeout_count"`   // channel 当前的超时消息总数
+	Clients       []ClientStats `json:"clients"`         // 属于本 topic 的全部 consumer
+	Paused        bool          `json:"paused"`          // channel 是否处于暂停状态
 
 	E2eProcessingLatency *quantile.Result `json:"e2e_processing_latency"`
 }
 
+// NewChannelStats 新建一个 ChannelStats 实例
 func NewChannelStats(c *Channel, clients []ClientStats) ChannelStats {
 	c.inFlightMutex.Lock()
 	inflight := len(c.inFlightMessages)
@@ -71,11 +75,13 @@ func NewChannelStats(c *Channel, clients []ClientStats) ChannelStats {
 	}
 }
 
+// PubCount 指代当前 producer 发布消息的 topic 和 count
 type PubCount struct {
 	Topic string `json:"topic"`
 	Count uint64 `json:"count"`
 }
 
+// ClientStats 代表 client 的当前状态
 type ClientStats struct {
 	ClientID        string `json:"client_id"`
 	Hostname        string `json:"hostname"`
@@ -105,8 +111,10 @@ type ClientStats struct {
 	TLSNegotiatedProtocolIsMutual bool   `json:"tls_negotiated_protocol_is_mutual"`
 }
 
+// Topics 数组
 type Topics []*Topic
 
+// 用于 Topics 排序
 func (t Topics) Len() int      { return len(t) }
 func (t Topics) Swap(i, j int) { t[i], t[j] = t[j], t[i] }
 
@@ -116,8 +124,10 @@ type TopicsByName struct {
 
 func (t TopicsByName) Less(i, j int) bool { return t.Topics[i].name < t.Topics[j].name }
 
+// Channels 数组
 type Channels []*Channel
 
+// 用于 Channels 排序
 func (c Channels) Len() int      { return len(c) }
 func (c Channels) Swap(i, j int) { c[i], c[j] = c[j], c[i] }
 
@@ -127,6 +137,7 @@ type ChannelsByName struct {
 
 func (c ChannelsByName) Less(i, j int) bool { return c.Channels[i].name < c.Channels[j].name }
 
+// GetStats 获取 topic，channel 的当前 stats，若为空，则返回 nsqd 全部的 topics，channels 的 stats
 func (n *NSQD) GetStats(topic string, channel string) []TopicStats {
 	n.RLock()
 	var realTopics []*Topic
@@ -175,6 +186,7 @@ func (n *NSQD) GetStats(topic string, channel string) []TopicStats {
 	return topics
 }
 
+// GetProducerStats 获取 producer 的 stats
 func (n *NSQD) GetProducerStats() []ClientStats {
 	n.clientLock.RLock()
 	var producers []Client
@@ -203,6 +215,7 @@ type memStats struct {
 	GCTotalRuns       uint32 `json:"gc_total_runs"`
 }
 
+// getMemStats 获取当前 nsqd 的内存消耗情况
 func getMemStats() memStats {
 	var ms runtime.MemStats
 	runtime.ReadMemStats(&ms)
