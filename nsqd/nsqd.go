@@ -45,7 +45,7 @@ type Client interface {
 // NSQD 结构体
 type NSQD struct {
 	// 64bit atomic vars need to be first for proper alignment on 32bit platforms
-	clientIDSequence int64
+	clientIDSequence int64 // 连接 nsqd tcp server 的 client 数目
 
 	sync.RWMutex
 
