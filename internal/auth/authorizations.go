@@ -11,12 +11,14 @@ import (
 	"github.com/nsqio/nsq/internal/http_api"
 )
 
+// Authorization 指代权限 struct
 type Authorization struct {
 	Topic       string   `json:"topic"`
 	Channels    []string `json:"channels"`
 	Permissions []string `json:"permissions"`
 }
 
+// State 用于表示 client 当前当权限状态
 type State struct {
 	TTL            int             `json:"ttl"`
 	Authorizations []Authorization `json:"authorizations"`
@@ -25,6 +27,7 @@ type State struct {
 	Expires        time.Time
 }
 
+// HasPermission 表明 Authorization 是否拥有 permission 权限
 func (a *Authorization) HasPermission(permission string) bool {
 	for _, p := range a.Permissions {
 		if permission == p {
@@ -34,6 +37,7 @@ func (a *Authorization) HasPermission(permission string) bool {
 	return false
 }
 
+// IsAllowed 指代 Authorization 是否拥有 (topic, channel) 的权限
 func (a *Authorization) IsAllowed(topic, channel string) bool {
 	if channel != "" {
 		if !a.HasPermission("subscribe") {
@@ -60,6 +64,7 @@ func (a *Authorization) IsAllowed(topic, channel string) bool {
 	return false
 }
 
+// IsAllowed 指代 client 是否拥有 (topic, channel) 的权限
 func (a *State) IsAllowed(topic, channel string) bool {
 	for _, aa := range a.Authorizations {
 		if aa.IsAllowed(topic, channel) {
@@ -69,6 +74,7 @@ func (a *State) IsAllowed(topic, channel string) bool {
 	return false
 }
 
+// IsExpired client 当前的权限状态是否过期
 func (a *State) IsExpired() bool {
 	if a.Expires.Before(time.Now()) {
 		return true
@@ -76,6 +82,7 @@ func (a *State) IsExpired() bool {
 	return false
 }
 
+// QueryAnyAuthd 循环执行 QueryAuthd，一个返回结果就返回
 func QueryAnyAuthd(authd []string, remoteIP, tlsEnabled, authSecret string,
 	connectTimeout time.Duration, requestTimeout time.Duration) (*State, error) {
 	for _, a := range authd {
@@ -89,6 +96,7 @@ func QueryAnyAuthd(authd []string, remoteIP, tlsEnabled, authSecret string,
 	return nil, errors.New("Unable to access auth server")
 }
 
+// QueryAuthd 发送 GETV1 请求询问 client 的权限状态
 func QueryAuthd(authd, remoteIP, tlsEnabled, authSecret string,
 	connectTimeout time.Duration, requestTimeout time.Duration) (*State, error) {
 	v := url.Values{}

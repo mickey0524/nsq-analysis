@@ -14,8 +14,9 @@ import (
 	"github.com/nsqio/nsq/internal/auth"
 )
 
-const defaultBufferSize = 16 * 1024
+const defaultBufferSize = 16 * 1024 // client 默认的 buffer size，reader 和 writer 用的是 bufio
 
+// 当前 client 的状态
 const (
 	stateInit = iota
 	stateDisconnected
@@ -24,6 +25,7 @@ const (
 	stateClosing
 )
 
+// client 向 nsqd tcp server IDENTIFY
 type identifyDataV2 struct {
 	ClientID            string `json:"client_id"`
 	Hostname            string `json:"hostname"`
@@ -40,6 +42,7 @@ type identifyDataV2 struct {
 	MsgTimeout          int    `json:"msg_timeout"`
 }
 
+// IDENTIFY 完成之后，使用 identifyEvent 记录 client 的一些最新参数，用于更新 nsqd server 的 messagePump
 type identifyEvent struct {
 	OutputBufferTimeout time.Duration
 	HeartbeatInterval   time.Duration
@@ -47,25 +50,26 @@ type identifyEvent struct {
 	MsgTimeout          time.Duration
 }
 
+// clientV2 指代连上 nsqd server 的客户端
 type clientV2 struct {
 	// 64bit atomic vars need to be first for proper alignment on 32bit platforms
-	ReadyCount    int64
-	InFlightCount int64
-	MessageCount  uint64
-	FinishCount   uint64
-	RequeueCount  uint64
+	ReadyCount    int64  // client 能接收的消息数目
+	InFlightCount int64  // 发送中的消息数目
+	MessageCount  uint64 // 发送的消息总数
+	FinishCount   uint64 // 发送成功的消息总数
+	RequeueCount  uint64 // 重新发送的消息总数
 
-	pubCounts map[string]uint64
+	pubCounts map[string]uint64 // 作用于 producer，统计生产者向每个 topic 发送的消息数目
 
 	writeLock sync.RWMutex
 	metaLock  sync.RWMutex
 
-	ID        int64
-	ctx       *context
-	UserAgent string
+	ID        int64    // client ID
+	ctx       *context // 上下文作用域，存放当前 nsqd
+	UserAgent string   // client ua
 
 	// original connection
-	net.Conn
+	net.Conn // client 和 nsqd server 的连接
 
 	// connections based on negotiated features
 	tlsConn     *tls.Conn
@@ -75,43 +79,44 @@ type clientV2 struct {
 	Reader *bufio.Reader
 	Writer *bufio.Writer
 
-	OutputBufferSize    int
-	OutputBufferTimeout time.Duration
+	OutputBufferSize    int           // bufio buffer size
+	OutputBufferTimeout time.Duration // 每隔多少时间，bufio writer flush 一次
 
-	HeartbeatInterval time.Duration
+	HeartbeatInterval time.Duration // 心跳间隔
 
-	MsgTimeout time.Duration
+	MsgTimeout time.Duration // 消息超时时间
 
-	State          int32
-	ConnectTime    time.Time
-	Channel        *Channel
-	ReadyStateChan chan int
-	ExitChan       chan int
+	State          int32     // client 当前状态
+	ConnectTime    time.Time // client 连上 nsqd server 的时间点
+	Channel        *Channel  // client 消费的 channel
+	ReadyStateChan chan int  // client param 更新的 chan
+	ExitChan       chan int  // client 退出的 chan
 
-	ClientID string
+	ClientID string // 标识 client 的 key，默认等于 hostname
 	Hostname string
 
-	SampleRate int32
+	SampleRate int32 // 客户端的消费速度，例如 SampleRate 为 80，如果 rand 一个 0-100 的随机数大于 80，本次 client 则不消费
 
-	IdentifyEventChan chan identifyEvent
-	SubEventChan      chan *Channel
+	IdentifyEventChan chan identifyEvent // IDENTITY 请求的回调 chan
+	SubEventChan      chan *Channel      // client subscribe channel 的回调 chan
 
-	TLS     int32
-	Snappy  int32
-	Deflate int32
+	TLS     int32 // 是否 tls 加密
+	Snappy  int32 // 是否 snappy 压缩
+	Deflate int32 // 是否 deflate 压缩
 
 	// re-usable buffer for reading the 4-byte lengths off the wire
 	lenBuf   [4]byte
 	lenSlice []byte
 
-	AuthSecret string
-	AuthState  *auth.State
+	AuthSecret string      // 鉴权秘钥
+	AuthState  *auth.State // client 的权限状态
 }
 
+// 新建一个 client
 func newClientV2(id int64, conn net.Conn, ctx *context) *clientV2 {
 	var identifier string
 	if conn != nil {
-		identifier, _, _ = net.SplitHostPort(conn.RemoteAddr().String())
+		identifier, _, _ = net.SplitHostPort(conn.RemoteAddr().String()) // 获取 client 的 hostname
 	}
 
 	c := &clientV2{
@@ -150,44 +155,47 @@ func newClientV2(id int64, conn net.Conn, ctx *context) *clientV2 {
 	return c
 }
 
+// String 返回 client 地址
 func (c *clientV2) String() string {
 	return c.RemoteAddr().String()
 }
 
+// client 向 nsqd server 发送 IDENTITY 请求，给 client 的一些 param 赋值
 func (c *clientV2) Identify(data identifyDataV2) error {
 	c.ctx.nsqd.logf(LOG_INFO, "[%s] IDENTIFY: %+v", c, data)
 
 	c.metaLock.Lock()
-	c.ClientID = data.ClientID
-	c.Hostname = data.Hostname
-	c.UserAgent = data.UserAgent
+	c.ClientID = data.ClientID   // 更新 ClientID
+	c.Hostname = data.Hostname   // 更新 Hostname
+	c.UserAgent = data.UserAgent // 更新 ua
 	c.metaLock.Unlock()
 
-	err := c.SetHeartbeatInterval(data.HeartbeatInterval)
+	err := c.SetHeartbeatInterval(data.HeartbeatInterval) // 更新心跳间隔
 	if err != nil {
 		return err
 	}
 
-	err = c.SetOutputBufferSize(data.OutputBufferSize)
+	err = c.SetOutputBufferSize(data.OutputBufferSize) // 更新 client reader writer 的 buffer size
 	if err != nil {
 		return err
 	}
 
-	err = c.SetOutputBufferTimeout(data.OutputBufferTimeout)
+	err = c.SetOutputBufferTimeout(data.OutputBufferTimeout) // 更新 client writer flush 的间隔
 	if err != nil {
 		return err
 	}
 
-	err = c.SetSampleRate(data.SampleRate)
+	err = c.SetSampleRate(data.SampleRate) // 更新 consumer 的消费速率
 	if err != nil {
 		return err
 	}
 
-	err = c.SetMsgTimeout(data.MsgTimeout)
+	err = c.SetMsgTimeout(data.MsgTimeout) // 更新消息的 timeout
 	if err != nil {
 		return err
 	}
 
+	// 更新完毕之后，实例化一个 identifyEvent，用于通知 nsqd server 的 messagePump 进行对应的更新
 	ie := identifyEvent{
 		OutputBufferTimeout: c.OutputBufferTimeout,
 		HeartbeatInterval:   c.HeartbeatInterval,
@@ -204,6 +212,7 @@ func (c *clientV2) Identify(data identifyDataV2) error {
 	return nil
 }
 
+// Stats 返回 client 的状态，服务于 /stats 这个 http 接口
 func (c *clientV2) Stats() ClientStats {
 	c.metaLock.RLock()
 	clientID := c.ClientID
@@ -255,9 +264,10 @@ func (c *clientV2) Stats() ClientStats {
 	return stats
 }
 
+// client 是否为生产者
 func (c *clientV2) IsProducer() bool {
 	c.metaLock.RLock()
-	retval := len(c.pubCounts) > 0
+	retval := len(c.pubCounts) > 0 // 如果发布了消息，即为生产者
 	c.metaLock.RUnlock()
 	return retval
 }
@@ -314,7 +324,9 @@ func (p *prettyConnectionState) GetVersion() string {
 	}
 }
 
+// client 消费者是否准备好了接收 message
 func (c *clientV2) IsReadyForMessages() bool {
+	// 当消费者订阅的 channel 处于 Pause 状态，返回 false
 	if c.Channel.IsPaused() {
 		return false
 	}
@@ -324,6 +336,7 @@ func (c *clientV2) IsReadyForMessages() bool {
 
 	c.ctx.nsqd.logf(LOG_DEBUG, "[%s] state rdy: %4d inflt: %4d", c, readyCount, inFlightCount)
 
+	// 当消费者能够接收的消息数目小于发送中的消息总数时，返回 false
 	if inFlightCount >= readyCount || readyCount <= 0 {
 		return false
 	}
@@ -331,6 +344,7 @@ func (c *clientV2) IsReadyForMessages() bool {
 	return true
 }
 
+// SetReadyCount 更新消费者能够接收的消息数目
 func (c *clientV2) SetReadyCount(count int64) {
 	atomic.StoreInt64(&c.ReadyCount, count)
 	c.tryUpdateReadyState()
@@ -346,39 +360,46 @@ func (c *clientV2) tryUpdateReadyState() {
 	}
 }
 
+// FinishedMessage 表明一条消息到达消费者，InFlightCount 数目减一，FinishCount 数目加一
 func (c *clientV2) FinishedMessage() {
 	atomic.AddUint64(&c.FinishCount, 1)
 	atomic.AddInt64(&c.InFlightCount, -1)
 	c.tryUpdateReadyState()
 }
 
+// Empty 将 InFlightCount 置为 0
 func (c *clientV2) Empty() {
 	atomic.StoreInt64(&c.InFlightCount, 0)
 	c.tryUpdateReadyState()
 }
 
+// SendingMessage 发送一条消息给消费者
 func (c *clientV2) SendingMessage() {
 	atomic.AddInt64(&c.InFlightCount, 1)
 	atomic.AddUint64(&c.MessageCount, 1)
 }
 
+// PublishedMessage 生产者生产消息，记录在 pubCounts 中，方便 stats 查看
 func (c *clientV2) PublishedMessage(topic string, count uint64) {
 	c.metaLock.Lock()
 	c.pubCounts[topic] += count
 	c.metaLock.Unlock()
 }
 
+// TimedOutMessage 表明一条消息 timeout，InFlightCount 数目减一
 func (c *clientV2) TimedOutMessage() {
 	atomic.AddInt64(&c.InFlightCount, -1)
 	c.tryUpdateReadyState()
 }
 
+// RequeuedMessage 将一条消息从 inFlightMessages 中删除，然后重新发送
 func (c *clientV2) RequeuedMessage() {
 	atomic.AddUint64(&c.RequeueCount, 1)
 	atomic.AddInt64(&c.InFlightCount, -1)
 	c.tryUpdateReadyState()
 }
 
+// StartClose 关闭 client
 func (c *clientV2) StartClose() {
 	// Force the client into ready 0
 	c.SetReadyCount(0)
@@ -394,6 +415,7 @@ func (c *clientV2) UnPause() {
 	c.tryUpdateReadyState()
 }
 
+// SetHeartbeatInterval 更新 client 的心跳间隔
 func (c *clientV2) SetHeartbeatInterval(desiredInterval int) error {
 	c.writeLock.Lock()
 	defer c.writeLock.Unlock()
@@ -413,6 +435,7 @@ func (c *clientV2) SetHeartbeatInterval(desiredInterval int) error {
 	return nil
 }
 
+// SetOutputBufferSize 更新 client writer buffer size
 func (c *clientV2) SetOutputBufferSize(desiredSize int) error {
 	var size int
 
@@ -442,6 +465,7 @@ func (c *clientV2) SetOutputBufferSize(desiredSize int) error {
 	return nil
 }
 
+// SetOutputBufferTimeout 更新 client writer flush 的时间间隔
 func (c *clientV2) SetOutputBufferTimeout(desiredTimeout int) error {
 	c.writeLock.Lock()
 	defer c.writeLock.Unlock()
@@ -461,6 +485,7 @@ func (c *clientV2) SetOutputBufferTimeout(desiredTimeout int) error {
 	return nil
 }
 
+// SetSampleRate 设置 client 的消费比率
 func (c *clientV2) SetSampleRate(sampleRate int32) error {
 	if sampleRate < 0 || sampleRate > 99 {
 		return fmt.Errorf("sample rate (%d) is invalid", sampleRate)
@@ -469,6 +494,7 @@ func (c *clientV2) SetSampleRate(sampleRate int32) error {
 	return nil
 }
 
+// SetMsgTimeout 设置消息的 timeout
 func (c *clientV2) SetMsgTimeout(msgTimeout int) error {
 	c.writeLock.Lock()
 	defer c.writeLock.Unlock()
@@ -543,6 +569,7 @@ func (c *clientV2) UpgradeSnappy() error {
 	return nil
 }
 
+// Flush 将 writer buffer 中的缓存的字节全部写入底层 conn
 func (c *clientV2) Flush() error {
 	var zeroTime time.Time
 	if c.HeartbeatInterval > 0 {
@@ -563,6 +590,7 @@ func (c *clientV2) Flush() error {
 	return nil
 }
 
+// QueryAuthd 请求鉴权
 func (c *clientV2) QueryAuthd() error {
 	remoteIP, _, err := net.SplitHostPort(c.String())
 	if err != nil {
@@ -585,11 +613,13 @@ func (c *clientV2) QueryAuthd() error {
 	return nil
 }
 
+// Auth 鉴权
 func (c *clientV2) Auth(secret string) error {
 	c.AuthSecret = secret
 	return c.QueryAuthd()
 }
 
+// IsAuthorized 指代 client 针对 (topic, channel) 是否拥有权限
 func (c *clientV2) IsAuthorized(topic, channel string) (bool, error) {
 	if c.AuthState == nil {
 		return false, nil
@@ -606,6 +636,7 @@ func (c *clientV2) IsAuthorized(topic, channel string) (bool, error) {
 	return false, nil
 }
 
+// HasAuthorizations 指代 client 是否拥有权限
 func (c *clientV2) HasAuthorizations() bool {
 	if c.AuthState != nil {
 		return len(c.AuthState.Authorizations) != 0

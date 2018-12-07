@@ -19,20 +19,22 @@ import (
 
 const maxTimeout = time.Hour
 
+// 三种类型的 frame
 const (
 	frameTypeResponse int32 = 0
 	frameTypeError    int32 = 1
 	frameTypeMessage  int32 = 2
 )
 
-var separatorBytes = []byte(" ")
-var heartbeatBytes = []byte("_heartbeat_")
+var separatorBytes = []byte(" ")           // tcp 字节流参数分隔符
+var heartbeatBytes = []byte("_heartbeat_") // 心跳包 返回
 var okBytes = []byte("OK")
 
 type protocolV2 struct {
-	ctx *context
+	ctx *context // nsqd 上下文
 }
 
+// IOLoop 是 nsqd tcp server 的 hanlder
 func (p *protocolV2) IOLoop(conn net.Conn) error {
 	var err error
 	var line []byte
