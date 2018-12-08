@@ -35,13 +35,13 @@ type Topic struct {
 	deleteCallback func(*Topic) // 删除的回调函数
 	deleter        sync.Once
 
-	paused    int32 // topic 是否处于暂停状态
-	pauseChan chan int
+	paused    int32    // topic 是否处于暂停状态
+	pauseChan chan int // pause 事件的回调 chan
 
 	ctx *context // nsqd 上下文
 }
 
-// Topic constructor
+// NewTopic 生成一个新的 topic 实例
 func NewTopic(topicName string, ctx *context, deleteCallback func(*Topic)) *Topic {
 	t := &Topic{
 		name:              topicName,
@@ -84,6 +84,7 @@ func NewTopic(topicName string, ctx *context, deleteCallback func(*Topic)) *Topi
 	return t
 }
 
+// Start 启动 topic 的 messagePump
 func (t *Topic) Start() {
 	select {
 	case t.startChan <- 1:
@@ -132,7 +133,7 @@ func (t *Topic) getOrCreateChannel(channelName string) (*Channel, bool) {
 	return channel, false
 }
 
-// 获取 topic 中 name 为 channelName 的 channel，如果不存在，返回 nil
+// GetExistingChannel 获取 topic 中 name 为 channelName 的 channel，如果不存在，返回 nil
 func (t *Topic) GetExistingChannel(channelName string) (*Channel, error) {
 	t.RLock()
 	defer t.RUnlock()
@@ -143,7 +144,7 @@ func (t *Topic) GetExistingChannel(channelName string) (*Channel, error) {
 	return channel, nil
 }
 
-// 当 topic 中包括 name 为 channelName 的 channel，将其删除
+// DeleteExistingChannel 当 topic 中包括 name 为 channelName 的 channel，将其删除
 func (t *Topic) DeleteExistingChannel(channelName string) error {
 	t.Lock()
 	channel, ok := t.channelMap[channelName]
@@ -175,7 +176,7 @@ func (t *Topic) DeleteExistingChannel(channelName string) error {
 	return nil
 }
 
-// PutMessage writes a Message to the queue
+// PutMessage 向 topic 写一条消息，如果 memoryMsgQueue 满了，则写入 backendQueue
 func (t *Topic) PutMessage(m *Message) error {
 	t.RLock()
 	defer t.RUnlock()
@@ -190,7 +191,7 @@ func (t *Topic) PutMessage(m *Message) error {
 	return nil
 }
 
-// PutMessages writes multiple Messages to the queue
+// PutMessages 一次性写入多条 message
 func (t *Topic) PutMessages(msgs []*Message) error {
 	t.RLock()
 	defer t.RUnlock()
@@ -454,10 +455,12 @@ func (t *Topic) AggregateChannelE2eProcessingLatency() *quantile.Quantile {
 	return latencyStream
 }
 
+// Pause 暂停 topic
 func (t *Topic) Pause() error {
 	return t.doPause(true)
 }
 
+// UnPause 取消暂停
 func (t *Topic) UnPause() error {
 	return t.doPause(false)
 }
@@ -477,10 +480,12 @@ func (t *Topic) doPause(pause bool) error {
 	return nil
 }
 
+// IsPaused 返回当前 topic 是否处于暂停状态
 func (t *Topic) IsPaused() bool {
 	return atomic.LoadInt32(&t.paused) == 1
 }
 
+// GenerateID 生成 message 的 ID
 func (t *Topic) GenerateID() MessageID {
 retry:
 	id, err := t.idFactory.NewGUID()

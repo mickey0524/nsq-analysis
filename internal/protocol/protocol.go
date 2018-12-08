@@ -14,6 +14,7 @@ type Protocol interface {
 // SendResponse is a server side utility function to prefix data with a length header
 // and write to the supplied Writer
 // SendResponse 用于 nsqlookupd 的 server 返回 tcp response
+// 4 byte 长度 + response body
 func SendResponse(w io.Writer, data []byte) (int, error) {
 	err := binary.Write(w, binary.BigEndian, int32(len(data)))
 	if err != nil {
@@ -31,6 +32,7 @@ func SendResponse(w io.Writer, data []byte) (int, error) {
 // SendFramedResponse is a server side utility function to prefix data with a length header
 // and frame header and write to the supplied Writer
 // SendFramedResponse 用于 nsqd 的 server 返回 tcp response
+// 4 byte 长度 + 4 byte frame type + response body
 func SendFramedResponse(w io.Writer, frameType int32, data []byte) (int, error) {
 	beBuf := make([]byte, 4)
 	size := uint32(len(data)) + 4

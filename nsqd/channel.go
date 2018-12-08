@@ -15,10 +15,11 @@ import (
 	"github.com/nsqio/nsq/internal/quantile"
 )
 
+// Consumer 指代一个消费者
 type Consumer interface {
 	UnPause()
 	Pause()
-	Close() error
+	Close() error // client_v2 的 Close 来自嵌套的 net.Conn
 	TimedOutMessage()
 	Stats() ClientStats
 	Empty()
@@ -36,9 +37,9 @@ type Consumer interface {
 // Channel 拥有自己的 message chan
 type Channel struct {
 	// 64bit atomic vars need to be first for proper alignment on 32bit platforms
-	requeueCount uint64
-	messageCount uint64
-	timeoutCount uint64
+	requeueCount uint64 // 重新发送的消息总数
+	messageCount uint64 // 写入 channel 的消息总数
+	timeoutCount uint64 // 发送超时的消息总数
 
 	sync.RWMutex
 
@@ -350,7 +351,7 @@ func (c *Channel) TouchMessage(clientID int64, id MessageID, clientMsgTimeout ti
 	return nil
 }
 
-// FinishMessage 丢弃一条 in-flight message
+// FinishMessage 完成一条 message 的消费
 func (c *Channel) FinishMessage(clientID int64, id MessageID) error {
 	msg, err := c.popInFlightMessage(clientID, id)
 	if err != nil {

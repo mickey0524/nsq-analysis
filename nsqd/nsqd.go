@@ -182,6 +182,7 @@ func (n *NSQD) swapOpts(opts *Options) {
 	n.opts.Store(opts)
 }
 
+// triggerOptsNotification 向 optsNotificationChan chan 中写入一个 struct，然后 lookupLoop 会更新 lookupPeers
 func (n *NSQD) triggerOptsNotification() {
 	select {
 	case n.optsNotificationChan <- struct{}{}:
