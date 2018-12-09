@@ -35,7 +35,7 @@ Nsq 推荐通过他们相应的 nsqd 实例使用协同定位发布者，这意�
 
 ![2.png](./imgs/2.png)
 
-首先，一个 producer 向 nsqd节点 发送消息，要做到这点，首先要先打开一个连接（tcp/http），然后发送一个包含 topic 和消息主体的发布命令，topic 会将消息存储在内存的 memoryMsgQueue（优先）或者 磁盘上（backendQueue），通过 messagePump，topic 会复制这些消息并且 put 到在每一个连接 topic 的 channel 上。
+首先，一个 producer 向 nsqd节点发送消息，要做到这点，首先要先打开一个连接（tcp/http），然后发送一个包含 topic 和消息主体的发布命令，topic 会将消息存储在内存的 memoryMsgQueue（优先）或者 磁盘上（backendQueue），通过 messagePump，topic 会复制这些消息并且 put 到在每一个连接 topic 的 channel 上。
 
 ![1.gif](./imgs/1.gif)
 
@@ -49,8 +49,8 @@ Nsq 推荐通过他们相应的 nsqd 实例使用协同定位发布者，这意�
 
 * nsq 内部的消息不是持久化的，因为 topic 和 channel 都使用了 memoryMsgQueue，因为当机器 down 掉之后，是无法恢复内存中的消息的
 
-* 一条消息可能不止被发送一次，这种情况很容易发送，当一条 inFlight 的消息在 timeout 之后返回 FIN，这个时候该条消息已经被重新发送了，同理，message 的 group commit 也很容易导致这种情况，如果 consumer 要求绝对 unique，需要自行解决
+* 一条消息可能不止被发送一次，这种情况很容易发送，当一条 inFlight 的消息在 timeout 之后返回 FIN，这个时候该条消息已经被重新发送了，同理，message 的 group commit 也很容易导致这种情况，如果 consumer 要求绝对 unique，需要自行解决
 
-* 消费者接收到消息可能是无序的，因为 topic 和 channel 都使用了 backendQueue，而 messagePump 的时候是一同 select race 的，因此可能会导致 message un-ordered
+* 消费者接收到消息可能是无序的，因为 topic 和 channel 都使用了 backendQueue，而 messagePump 的时候是一同 select race 的，因此可能会导致 message un-ordered
 
 在本项目中有对源码的详细注释，nsqd 和 nsqlookupd 的详细介绍见子目录的 `readme.md`
