@@ -18,6 +18,7 @@ func (l logWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
+// Serve 启动一个 http server 的服务
 func Serve(listener net.Listener, handler http.Handler, proto string, logf lg.AppLogFunc) {
 	logf(lg.INFO, "%s: listening on %s", proto, listener.Addr())
 

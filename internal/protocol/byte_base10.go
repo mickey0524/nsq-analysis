@@ -6,6 +6,7 @@ import (
 
 var errBase10 = errors.New("failed to convert to Base10")
 
+// ByteToBase10 将 byte 数组转为 uint64
 func ByteToBase10(b []byte) (n uint64, err error) {
 	base := uint64(10)
 

@@ -13,6 +13,7 @@ import (
 	"time"
 )
 
+// NewDeadlineTransport 新建一个带 deadline 的 http transport
 // A custom http.Transport with support for deadline timeouts
 func NewDeadlineTransport(connectTimeout time.Duration, requestTimeout time.Duration) *http.Transport {
 	// arbitrary values copied from http.DefaultTransport
@@ -30,10 +31,12 @@ func NewDeadlineTransport(connectTimeout time.Duration, requestTimeout time.Dura
 	return transport
 }
 
+// Client 包裹一个 *http.Client
 type Client struct {
 	c *http.Client
 }
 
+// NewClient 创建一个 http 的 client
 func NewClient(tlsConfig *tls.Config, connectTimeout time.Duration, requestTimeout time.Duration) *Client {
 	transport := NewDeadlineTransport(connectTimeout, requestTimeout)
 	transport.TLSClientConfig = tlsConfig
@@ -119,6 +122,7 @@ retry:
 	return nil
 }
 
+// httpsEndpoint 得到一个 https 的请求地址
 func httpsEndpoint(endpoint string, body []byte) (string, error) {
 	var forbiddenResp struct {
 		HTTPSPort int `json:"https_port"`

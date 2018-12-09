@@ -8,12 +8,14 @@ func newInFlightPqueue(capacity int) inFlightPqueue {
 	return make(inFlightPqueue, 0, capacity)
 }
 
+// Swap 交换 inFlightPqueue 中两条消息的位置，需要将 index 一同交换，因为 remove 的时候按照 index 删除
 func (pq inFlightPqueue) Swap(i, j int) {
 	pq[i], pq[j] = pq[j], pq[i]
 	pq[i].index = i
 	pq[j].index = j
 }
 
+// Push 插入一条消息
 func (pq *inFlightPqueue) Push(x *Message) {
 	n := len(*pq)
 	c := cap(*pq)
@@ -28,6 +30,7 @@ func (pq *inFlightPqueue) Push(x *Message) {
 	pq.up(n)
 }
 
+// Pop 弹出一条消息
 func (pq *inFlightPqueue) Pop() *Message {
 	n := len(*pq)
 	c := cap(*pq)
@@ -44,6 +47,7 @@ func (pq *inFlightPqueue) Pop() *Message {
 	return x
 }
 
+// Remove 移除堆中 index 为 i 的 message
 func (pq *inFlightPqueue) Remove(i int) *Message {
 	n := len(*pq)
 	if n-1 != i {
@@ -57,6 +61,7 @@ func (pq *inFlightPqueue) Remove(i int) *Message {
 	return x
 }
 
+// PeekAndShift 如果当前 pri 最小的 message 小于 max，则返回，用于得到 timeout 的 message
 func (pq *inFlightPqueue) PeekAndShift(max int64) (*Message, int64) {
 	if len(*pq) == 0 {
 		return nil, 0
@@ -71,6 +76,7 @@ func (pq *inFlightPqueue) PeekAndShift(max int64) (*Message, int64) {
 	return x, 0
 }
 
+// 小根堆节点上移
 func (pq *inFlightPqueue) up(j int) {
 	for {
 		i := (j - 1) / 2 // parent
@@ -82,6 +88,7 @@ func (pq *inFlightPqueue) up(j int) {
 	}
 }
 
+// 小根堆节点下移
 func (pq *inFlightPqueue) down(i, n int) {
 	for {
 		j1 := 2*i + 1

@@ -15,19 +15,19 @@ const (
 
 type MessageID [MsgIDLength]byte
 
-// 定义的消息结构体
+// Message 定义的消息结构体
 type Message struct {
-	ID        MessageID
-	Body      []byte
-	Timestamp int64
-	Attempts  uint16
+	ID        MessageID // 消息 id
+	Body      []byte    // 消息 body
+	Timestamp int64     // 生成消息的时间戳
+	Attempts  uint16    // 消息的尝试发送次数
 
 	// for in-flight handling
-	deliveryTS time.Time
-	clientID   int64
-	pri        int64
-	index      int
-	deferred   time.Duration
+	deliveryTS time.Time     // 消息发送的时间
+	clientID   int64         // 消息被哪个 consumer 消费
+	pri        int64         // 消息的 timeout 时间
+	index      int           // 消息位于 queue array 的下标
+	deferred   time.Duration // 消息的延迟发送时间
 }
 
 // 新建一个消息
@@ -39,7 +39,7 @@ func NewMessage(id MessageID, body []byte) *Message {
 	}
 }
 
-// 将一条消息写入 bytes.buffer，进而进行磁盘存储
+// WriteTo 将一条消息写入 bytes.buffer，进而进行磁盘存储
 func (m *Message) WriteTo(w io.Writer) (int64, error) {
 	var buf [10]byte
 	var total int64

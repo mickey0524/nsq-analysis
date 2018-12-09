@@ -11,19 +11,24 @@ import (
 	"github.com/nsqio/nsq/internal/lg"
 )
 
+// Decorator 装饰器
 type Decorator func(APIHandler) APIHandler
 
+// APIHandler 定义一个 APIHandler 的结构，方便 Decorator 的定义
 type APIHandler func(http.ResponseWriter, *http.Request, httprouter.Params) (interface{}, error)
 
+// Err 代指出错的数据结构
 type Err struct {
-	Code int
-	Text string
+	Code int    // 状态码
+	Text string // 错误原因
 }
 
+// Error 返回错误原因
 func (e Err) Error() string {
 	return e.Text
 }
 
+// acceptVersion 判断请求是否是 nsq 的
 func acceptVersion(req *http.Request) int {
 	if req.Header.Get("accept") == "application/vnd.nsq; version=1.0" {
 		return 1
@@ -32,6 +37,7 @@ func acceptVersion(req *http.Request) int {
 	return 0
 }
 
+// PlainText 返回纯文本
 func PlainText(f APIHandler) APIHandler {
 	return func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) (interface{}, error) {
 		code := 200
@@ -54,6 +60,7 @@ func PlainText(f APIHandler) APIHandler {
 	}
 }
 
+// V1 处理 v1 版本的 http 请求
 func V1(f APIHandler) APIHandler {
 	return func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) (interface{}, error) {
 		data, err := f(w, req, ps)
@@ -66,6 +73,7 @@ func V1(f APIHandler) APIHandler {
 	}
 }
 
+// RespondV1 是 V1 函数的 handler
 func RespondV1(w http.ResponseWriter, code int, data interface{}) {
 	var response []byte
 	var err error
@@ -102,6 +110,7 @@ func RespondV1(w http.ResponseWriter, code int, data interface{}) {
 	w.Write(response)
 }
 
+// Decorate 装饰器函数
 func Decorate(f APIHandler, ds ...Decorator) httprouter.Handle {
 	decorated := f
 	for _, decorate := range ds {
@@ -112,6 +121,7 @@ func Decorate(f APIHandler, ds ...Decorator) httprouter.Handle {
 	}
 }
 
+// Log 中间件，打时间断点
 func Log(logf lg.AppLogFunc) Decorator {
 	return func(f APIHandler) APIHandler {
 		return func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) (interface{}, error) {
@@ -129,6 +139,7 @@ func Log(logf lg.AppLogFunc) Decorator {
 	}
 }
 
+// LogPanicHandler 处理 panic
 func LogPanicHandler(logf lg.AppLogFunc) func(w http.ResponseWriter, req *http.Request, p interface{}) {
 	return func(w http.ResponseWriter, req *http.Request, p interface{}) {
 		logf(lg.ERROR, "panic in HTTP handler - %s", p)
@@ -138,6 +149,7 @@ func LogPanicHandler(logf lg.AppLogFunc) func(w http.ResponseWriter, req *http.R
 	}
 }
 
+// LogNotFoundHandler 处理 404 not found
 func LogNotFoundHandler(logf lg.AppLogFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		Decorate(func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) (interface{}, error) {
@@ -146,6 +158,7 @@ func LogNotFoundHandler(logf lg.AppLogFunc) http.Handler {
 	})
 }
 
+// LogMethodNotAllowedHandler 处理 405 not allowed
 func LogMethodNotAllowedHandler(logf lg.AppLogFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		Decorate(func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) (interface{}, error) {

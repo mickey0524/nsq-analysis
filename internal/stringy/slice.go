@@ -1,5 +1,6 @@
 package stringy
 
+// Add 将 a 加入 s
 func Add(s []string, a string) []string {
 	for _, existing := range s {
 		if a == existing {
@@ -10,6 +11,7 @@ func Add(s []string, a string) []string {
 
 }
 
+// Union 合并 s 和 a 两个 slice
 func Union(s []string, a []string) []string {
 	for _, entry := range a {
 		found := false
@@ -26,6 +28,7 @@ func Union(s []string, a []string) []string {
 	return s
 }
 
+// Uniq 将 s slice 去重
 func Uniq(s []string) (r []string) {
 	for _, entry := range s {
 		found := false

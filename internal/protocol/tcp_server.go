@@ -8,10 +8,12 @@ import (
 	"github.com/nsqio/nsq/internal/lg"
 )
 
+// TCPHandler 指代了 TCP Handler Interface 的数据结构
 type TCPHandler interface {
 	Handle(net.Conn)
 }
 
+// TCPServer 启动一个 tcp 的 server
 func TCPServer(listener net.Listener, handler TCPHandler, logf lg.AppLogFunc) {
 	logf(lg.INFO, "TCP: listening on %s", listener.Addr())
 

@@ -4,6 +4,7 @@ import (
 	"math/rand"
 )
 
+// UniqRands 随机从 maxval 中取出 quantity 个参数，这个函数用于 nsqd queueScanLoop 中选取 channel
 func UniqRands(quantity int, maxval int) []int {
 	if maxval < quantity {
 		quantity = maxval
