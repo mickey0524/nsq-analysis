@@ -23,7 +23,7 @@ type NSQLookupd struct {
 	DB           *RegistrationDB       // 存放当前的Registrations，Topics，Channels
 }
 
-// 新建一个nsqlookupd实例
+// New 新建一个nsqlookupd实例
 func New(opts *Options) *NSQLookupd {
 	if opts.Logger == nil {
 		opts.Logger = log.New(os.Stderr, opts.LogPrefix, log.Ldate|log.Ltime|log.Lmicroseconds)
@@ -44,7 +44,7 @@ func New(opts *Options) *NSQLookupd {
 	return n
 }
 
-// 初始化tcplistener和httplistener
+// Main 初始化tcplistener和httplistener
 func (l *NSQLookupd) Main() error {
 	ctx := &Context{l}
 
@@ -72,17 +72,17 @@ func (l *NSQLookupd) Main() error {
 	return nil
 }
 
-// 返回tcp listener的地址
+// RealTCPAddr 返回tcp listener的地址
 func (l *NSQLookupd) RealTCPAddr() *net.TCPAddr {
 	return l.tcpListener.Addr().(*net.TCPAddr)
 }
 
-// 返回http listener的地址
+// RealHTTPAddr 返回http listener的地址
 func (l *NSQLookupd) RealHTTPAddr() *net.TCPAddr {
 	return l.httpListener.Addr().(*net.TCPAddr)
 }
 
-// 关闭tcp和http两个listener
+// Exit 关闭tcp和http两个listener
 func (l *NSQLookupd) Exit() {
 	if l.tcpListener != nil {
 		l.tcpListener.Close()

@@ -17,7 +17,7 @@ type httpServer struct {
 	router http.Handler
 }
 
-// http router，用于响应nsqadmin的请求，其实就是一个web server，用来显示nsqlookup.DB的状态
+// http router，用于响应 http 请求，其实就是一个 web server，用来显示 nsqlookup.DB 的状态
 func newHTTPServer(ctx *Context) *httpServer {
 	log := http_api.Log(ctx.nsqlookupd.logf)
 
@@ -66,7 +66,7 @@ func (s *httpServer) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	s.router.ServeHTTP(w, req)
 }
 
-// 响应 /ping 
+// 响应 /ping
 func (s *httpServer) pingHandler(w http.ResponseWriter, req *http.Request, ps httprouter.Params) (interface{}, error) {
 	return "OK", nil
 }
@@ -106,7 +106,7 @@ func (s *httpServer) doChannels(w http.ResponseWriter, req *http.Request, ps htt
 	}, nil
 }
 
-// 返回指定主题的一系列生产者 
+// 返回指定主题的一系列 nsqd 节点
 func (s *httpServer) doLookup(w http.ResponseWriter, req *http.Request, ps httprouter.Params) (interface{}, error) {
 	reqParams, err := http_api.NewReqParams(req)
 	if err != nil {
@@ -155,7 +155,6 @@ func (s *httpServer) doCreateTopic(w http.ResponseWriter, req *http.Request, ps 
 
 	return nil, nil
 }
-
 
 // 删除topic
 func (s *httpServer) doDeleteTopic(w http.ResponseWriter, req *http.Request, ps httprouter.Params) (interface{}, error) {
