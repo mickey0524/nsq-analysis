@@ -8,7 +8,7 @@
 
 ### nsqd.go
 
-`nsqd.do` 实现了 nsqd 实例的创建，nsqd 服务的启动，nsqd 实例异常中断时的元数据持久化以及 nsqd 实例重新启动时候的元数据恢复
+`nsqd.do` 定义了 NSQD 结构，实现了 nsqd 实例的创建，nsqd 服务的启动，nsqd 实例异常中断时的元数据持久化以及 nsqd 实例重新启动时候的元数据恢复
 
 nsqd 结构如下所示
 
