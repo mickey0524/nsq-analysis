@@ -4,7 +4,7 @@
 
 ### topic.go
 
-`topic.go` 定义了 Topic 结构，实现了 nsqd 实例的创建，消息的写入以及最重要的 messagePump
+`topic.go` 定义了 Topic 结构，实现了 topic 实例的创建，消息的写入以及最重要的 messagePump
 
 Topic 结构如下所示
 
