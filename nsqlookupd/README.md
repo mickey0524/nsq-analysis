@@ -8,7 +8,7 @@
 
 nsqlookupd 结构如下所示
 
-```
+```go
 type NSQLookupd struct {
 	sync.RWMutex                       // 读写锁，主要为了更新DB中的Registrations，Topics，Channels
 	opts         *Options              // option，一些配置文件
@@ -23,7 +23,7 @@ type NSQLookupd struct {
 
 传入 nsqlookupd 的 options，新建一个 DB 实例，创建一个 nsqlookupd 实例
 
-```
+```go
 n := &NSQLookupd{
 	opts: opts,
 	DB:   NewRegistrationDB(),
@@ -34,7 +34,7 @@ n := &NSQLookupd{
 
 新建 tcp server 和 http server，然后用 waitGroupWrap 包裹启动两个 server，这样在执行 Exit 退出的时候，会先等待两个 server close
 
-```
+```go
 func (l *NSQLookupd) Main() error {
 	ctx := &Context{l}
 
@@ -69,7 +69,7 @@ func (l *NSQLookupd) Main() error {
 
 数据结构如下所示
 
-```
+```go
 // RegistrationDB 存放一个Registration的全部Producer
 type RegistrationDB struct {
 	sync.RWMutex
@@ -115,7 +115,7 @@ type ProducerMap map[string]*Produc
 
 tcp request 是字节流，读取一行数据，用空格将字节流切割成 string 切片，调用 EXEC 函数，匹配执行不同的 handler
 
-```
+```go
 line, err = reader.ReadString('\n')
 if err != nil {
 	break
@@ -147,7 +147,7 @@ func (p *LookupProtocolV1) Exec(client *ClientV1, reader *bufio.Reader, params [
 
 REGISTER 首先获取 topic 和 channel，然后创建相应的 Registration，Registration 是 nsqlookupd.DB 的 key，将本连接的 nsqd 节点加入该 key 的 ProducerMap
 
-```
+```go
 topic, channel, err := getTopicChan("REGISTER", params)
 if err != nil {
 	return nil, err
@@ -171,7 +171,7 @@ if p.ctx.nsqlookupd.DB.AddProducer(key, &Producer{peerInfo: client.peerInfo}) {
 
 UNREGISTER 首先获取 topic 和 channel，然后创建相应的 Registration，将该 nsqd 节点从 Registration 对应的 ProducerMap 中删除
 
-```
+```go
 topic, channel, err := getTopicChan("UNREGISTER", params)
 if err != nil {
 	return nil, err
@@ -213,7 +213,7 @@ if channel != "" {
 
 PING 主要是 nsqd 用来向 nsqlookupd 发送心跳包的，代码很简单，就是更新一下对应 peerInfo 的 lastUpdate 时间，这个时间在判断 tombstoned
 
-```
+```go
 if client.peerInfo != nil {
 	// we could get a PING before other commands on the same client connection
 	cur := time.Unix(0, atomic.LoadInt64(&client.peerInfo.lastUpdate))
@@ -229,7 +229,7 @@ return []byte("OK"), nil
 
 IDENTIFY 主要是 nsqd 连上 tcp server 时候发送的注册包，实例化一个 PeerInfo 对象存储 nsqd 的元信息，然后将该 PeerInfo 对象加入 `Registration{"client", "", ""}` 的对应的 ProducerMap
 
-```
+```go
 peerInfo := PeerInfo{id: client.RemoteAddr().String()}
 err = json.Unmarshal(body, &peerInfo)
 if err != nil {
@@ -251,7 +251,7 @@ if p.ctx.nsqlookupd.DB.AddProducer(Registration{"client", "", ""}, &Producer{pee
 
 `http.go` 使用开源的轻量级路由库 httprouter 来进行路由选择
 
-```
+```go
 // http router，用于响应 http 请求，其实就是一个 web server，用来显示 nsqlookup.DB 的状态
 func newHTTPServer(ctx *Context) *httpServer {
 	log := http_api.Log(ctx.nsqlookupd.logf)
@@ -302,7 +302,7 @@ func newHTTPServer(ctx *Context) *httpServer {
 
 首先，调用 http_api.NewReqParams 方法获取 topicName 和 channelName，然后新建一个对应的 Registration，添加到 DB 中
 
-```
+```go
 // 创建 channel
 func (s *httpServer) doCreateChannel(w http.ResponseWriter, req *http.Request, ps httprouter.Params) (interface{}, error) {
 	reqParams, err := http_api.NewReqParams(req)
