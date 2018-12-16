@@ -211,7 +211,7 @@ return okBytes, nil
 
 messagePump 实现了消息的 push。for 循环最上面的 if-else 循环是用于控制 client\_v2.writer 的 flush 的，这里，Nsq 采用了 group commit，并不是一条消息 send 给 consumer 一次，而是多条消息一起 send。 在 select 中，当 flusherChan 赢得竞争的时候，flush 一次，将 flushed 设为 true，下次 for 循环的时候就不会 flush 了；当 subEventChan 赢得竞争时，subChannel 获得赋值，相应的，memoryMsgChan 和 backendMsgChan 就不为 nil 了，可以参与竞争，消息消费也就开始了；当 identifyEventChan 赢得竞争后，根据 client\_v2 新的 param 作出相应的更改；当 memoryMsgChan 和 backendMsgChan 赢得竞争的时候，消费一条消息
 
-```
+```go
 for {
 	if subChannel == nil || !client.IsReadyForMessages() {
 		// client 还没有准备好获取消息
