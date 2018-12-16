@@ -174,7 +174,7 @@ func (p *protocolV2) Send(client *clientV2, frameType int32, data []byte) error 
 
 // Exec 可以理解为 tcp 的 router
 func (p *protocolV2) Exec(client *clientV2, params [][]byte) ([]byte, error) {
-	if bytes.Equal(params[0], []byte("IDENTIFY")) {
+	if bytes.Equal(params[0], []byte("IDENTIFY")) { // client 注册
 		return p.IDENTIFY(client, params)
 	}
 	err := enforceTLSPolicy(client, p, params[0])
@@ -182,27 +182,27 @@ func (p *protocolV2) Exec(client *clientV2, params [][]byte) ([]byte, error) {
 		return nil, err
 	}
 	switch {
-	case bytes.Equal(params[0], []byte("FIN")):
+	case bytes.Equal(params[0], []byte("FIN")): // 一条消息消费完毕
 		return p.FIN(client, params)
-	case bytes.Equal(params[0], []byte("RDY")):
+	case bytes.Equal(params[0], []byte("RDY")): // consumer 当前能消费多少消息
 		return p.RDY(client, params)
-	case bytes.Equal(params[0], []byte("REQ")):
+	case bytes.Equal(params[0], []byte("REQ")): // 重新发送一条消息
 		return p.REQ(client, params)
-	case bytes.Equal(params[0], []byte("PUB")):
+	case bytes.Equal(params[0], []byte("PUB")): // producer 发布一条消息
 		return p.PUB(client, params)
-	case bytes.Equal(params[0], []byte("MPUB")):
+	case bytes.Equal(params[0], []byte("MPUB")): // producer 发布多条消息
 		return p.MPUB(client, params)
-	case bytes.Equal(params[0], []byte("DPUB")):
+	case bytes.Equal(params[0], []byte("DPUB")): // producer 延迟发布消息
 		return p.DPUB(client, params)
-	case bytes.Equal(params[0], []byte("NOP")):
+	case bytes.Equal(params[0], []byte("NOP")): // 无操作
 		return p.NOP(client, params)
-	case bytes.Equal(params[0], []byte("TOUCH")):
+	case bytes.Equal(params[0], []byte("TOUCH")): // 修改消息的 timeout 时间，但是不重新发送
 		return p.TOUCH(client, params)
-	case bytes.Equal(params[0], []byte("SUB")):
+	case bytes.Equal(params[0], []byte("SUB")): // consumer 订阅 channel
 		return p.SUB(client, params)
-	case bytes.Equal(params[0], []byte("CLS")):
+	case bytes.Equal(params[0], []byte("CLS")): // client close
 		return p.CLS(client, params)
-	case bytes.Equal(params[0], []byte("AUTH")):
+	case bytes.Equal(params[0], []byte("AUTH")): // client 鉴权
 		return p.AUTH(client, params)
 	}
 	return nil, protocol.NewFatalClientErr(nil, "E_INVALID", fmt.Sprintf("invalid command %s", params[0]))
