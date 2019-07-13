@@ -104,7 +104,7 @@ type Producer struct {
 }
 
 type Producers []*Producer
-type ProducerMap map[string]*Produc
+type ProducerMap map[string]*Producer
 ```
 
 ### lookup_protocol_v1.go

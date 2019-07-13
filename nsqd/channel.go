@@ -367,7 +367,7 @@ func (c *Channel) FinishMessage(clientID int64, id MessageID) error {
 // RequeueMessage 依据 timeout 参数重新安排一条 message
 //
 // `timeoutMs` == 0 - 立即写入 message chan/backend queue
-// `timeoutMs`  > 0 - 延迟写入（写入 deferredMessages）
+// `timeoutMs` > 0 - 延迟写入（写入 deferredMessages）
 //
 func (c *Channel) RequeueMessage(clientID int64, id MessageID, timeout time.Duration) error {
 	// remove from inflight first

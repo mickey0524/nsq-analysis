@@ -65,7 +65,7 @@ func NewRegistrationDB() *RegistrationDB {
 	}
 }
 
-// AddRegistration 新增一个Registration
+// AddRegistration 新增一个 Registration
 func (r *RegistrationDB) AddRegistration(k Registration) {
 	r.Lock()
 	defer r.Unlock()
@@ -75,7 +75,7 @@ func (r *RegistrationDB) AddRegistration(k Registration) {
 	}
 }
 
-// AddProducer 新增一个Registration的Producer
+// AddProducer 新增一个 Registration 的 Producer
 func (r *RegistrationDB) AddProducer(k Registration, p *Producer) bool {
 	r.Lock()
 	defer r.Unlock()
@@ -91,7 +91,7 @@ func (r *RegistrationDB) AddProducer(k Registration, p *Producer) bool {
 	return !found
 }
 
-// RemoveProducer 删除一个Registration的Producer
+// RemoveProducer 删除一个 Registration 的 Producer
 func (r *RegistrationDB) RemoveProducer(k Registration, id string) (bool, int) {
 	r.Lock()
 	defer r.Unlock()
@@ -116,12 +116,12 @@ func (r *RegistrationDB) RemoveRegistration(k Registration) {
 	delete(r.registrationMap, k)
 }
 
-// 当key或subkey为*的时候，代表全选，例如不写channel的topic
+// 当 key 或 subkey 为 * 的时候，代表全选，例如不写 channel 的 topic
 func (r *RegistrationDB) needFilter(key string, subkey string) bool {
 	return key == "*" || subkey == "*"
 }
 
-// FindRegistrations 寻找所有满足要求的Registrations
+// FindRegistrations 寻找所有满足要求的 Registrations
 func (r *RegistrationDB) FindRegistrations(category string, key string, subkey string) Registrations {
 	r.RLock()
 	defer r.RUnlock()
