@@ -664,6 +664,9 @@ func (n *NSQD) queueScanWorker(workCh chan *Channel, responseCh chan bool, close
 // priority queues. It manages a pool of queueScanWorker (configurable max of
 // QueueScanWorkerPoolMax (default: 4)) that process channels concurrently.
 //
+// queueScanLoop 在一个单 goroutine 上运行来处理传输中/延迟发送的队列
+// queueScanLoop 管理一个 queueScanWorker 池子（默认最多 4 个）来并发处理 Channels
+//
 // It copies Redis's probabilistic expiration algorithm: it wakes up every
 // QueueScanInterval (default: 100ms) to select a random QueueScanSelectionCount
 // (default: 20) channels from a locally cached list (refreshed every
